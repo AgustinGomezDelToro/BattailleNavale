@@ -5,9 +5,10 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#define CLIENT_ADDR "127.0.0.1" // Client address.
-#define SRV_PORT 8888 // Port when server launched first
+#define CLIENT_ADDR "127.0.0.1" // adresse client
+#define SRV_PORT 3550 // Port when server launched first
 #define CLT_PORT 8889 // Port when connected last
+
 // Standard definitions
 #define BOARD_SIZE 10
 #define S_PERDU -1 // Partie perdue
@@ -16,28 +17,26 @@
 #define S_TOUCHE_BIS 3 // Bateau touché
 #define S_COULE 4 //Bateau coulé.
 #define S_HANDSHAKE 10 // Code de poignée de main
-// Ships
-#define B_PORTE_AVION 5
-#define B_CROISEUR 4
-#define B_CONTRE_TORPILLEUR 3
+
+// les différents types de bateaux
+//1 bateau d’une case, un bateau de 2 cases, un bateau de 3 cases
+
+#define B_PORTE_AVION 1
 #define B_SOUS_MARIN 3
 #define B_TORPILLEUR 2
-// Values of the cells
-#define C_EAU 0 // Water
-#define C_EAU_T 1 // Water hit
-#define C_BAT_T 2 // Hit ship
+
+// les valeurs des cellules
+#define C_EAU 0 // eau
+#define C_EAU_T 1 // eau touché
+#define C_BAT_T 2
 #define C_PORTE_AVION 10
 #define C_PORTE_AVION_T 11
-#define C_CROISEUR 20
-#define C_CROISEUR_T 11
-#define C_CONTRE_TORPILLEUR 30
-#define C_CONTRE_TORPILLEUR_T 31
 #define C_SOUS_MARIN 40
 #define C_SOUS_MARIN_T 41
 #define C_TORPILLEUR 50
 #define C_TORPILLEUR_T 51
 
-// Colors from this post: http://stackoverflow.com/a/3219471/2444759
+// Couleurs
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
 #define ANSI_COLOR_YELLOW  "\x1b[33m"
@@ -46,7 +45,7 @@
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-// Grid rendering options
+// Les options de rendu de la grille
 const char line[] = "  +---+---+---+---+---+---+---+---+---+---+",
 				EAU[] = "   |",
 				EAU_T[] = ANSI_COLOR_BLUE " X " ANSI_COLOR_RESET "|",
@@ -65,14 +64,13 @@ typedef struct {
 } InfosServer;
 
 typedef struct {
-	/* 1 porte-avion (5 cases), 
-	 * 1 croiseur (4 cases), 
-	 * 1 contre torpilleur (3 cases), 
-	 * 1 sous-marin (3 cases), 
+	/* 1 porte-avion (1 cases),
+	 * 1 sous-marin (3 cases),
 	 * 1 torpilleur (2 cases),
 	 */
 	// Cases restantes pour les bateaux
-	int porteAvion, croiseur, contreTorpilleur, sousMarin, torpilleur, points;
+	int porteAvion, contreTorpilleur, sousMarin, torpilleur, points;
+	// int croiseur;
 	int grille[BOARD_SIZE][BOARD_SIZE];
 	int grilleEnnemie[BOARD_SIZE][BOARD_SIZE];
 } Plateau;
@@ -87,7 +85,7 @@ Coordonnees strToCoord(char string[], int hasDirection) {
 	char strX[2 + 1];
 	int i;
 
-	// Protect hasDirection range
+	//les directions du bateaux
 	if (hasDirection > 0) {
 		hasDirection = 1;
 		c.d = string[strlen(string) - 1];
@@ -95,14 +93,14 @@ Coordonnees strToCoord(char string[], int hasDirection) {
 		hasDirection = 0;
 	}
 
-	// Split the string
+// les diviseurs de chaine
 	c.y = string[0] - 'a';
 	//	printf("Debug strX- lg: %i, iMax: %i, str: %s ", (int) strlen(string), (int) strlen(string)-(1 + hasDirection), string);
 	for (i = 0; i < strlen(string)-(1 + hasDirection); i++) {
 		strX[i] = string[i + 1];
 	}
-	// Filling up (had trouble to get a clean string.)
-	for (i + 1; i < strlen(strX); i++) {
+
+	for (i++; i < strlen(strX); i++) {
 		strX[i] = '\0';
 	}
 	//	printf("strX: %s\n", strX);
@@ -112,29 +110,12 @@ Coordonnees strToCoord(char string[], int hasDirection) {
 	return c;
 }
 
-/**
- * @brief Affiche un beau logo
- */
-void logo() {
-	printf(ANSI_COLOR_GREEN);
-	printf(" ____        _        _ _ _                               _      \n");
-	printf("| __ )  __ _| |_ __ _(_) | | ___   _ __   __ ___   ____ _| | ___ \n");
-	printf("|  _ \\ / _` | __/ _` | | | |/ _ \\ | '_ \\ / _` \\ \\ / / _` | |/ _ \\\n");
-	printf("| |_) | (_| | || (_| | | | |  __/ | | | | (_| |\\ V / (_| | |  __/\n");
-	printf("|____/ \\__,_|\\__\\__,_|_|_|_|\\___| |_| |_|\\__,_| \\_/ \\__,_|_|\\___|\n\n");
-	printf(ANSI_COLOR_BLUE"        _     _     _ " ANSI_COLOR_RESET "__-=-//__  __\\\\-=-__" ANSI_COLOR_BLUE " _     _     _        \n" ANSI_COLOR_RESET);
-	printf(ANSI_COLOR_BLUE".-.,.-'`(,.-'`(,.-'`(," ANSI_COLOR_RESET "\\_______/" ANSI_COLOR_BLUE ".." ANSI_COLOR_RESET "\\_______/" ANSI_COLOR_BLUE ",)`'-.,)`'-.,)`'-.,¸.-.\n\n" ANSI_COLOR_RESET);
-}
+ // Initialise un plateau vierge
 
-/**
- * Initialise un plateau vierge
- * @return Plateau initialisé
- */
 Plateau initPlateau() {
 	Plateau p;
 	int i, j;
-	p.contreTorpilleur = B_CONTRE_TORPILLEUR;
-	p.croiseur = B_CROISEUR;
+
 	p.porteAvion = B_PORTE_AVION;
 	p.sousMarin = B_SOUS_MARIN;
 	p.torpilleur = B_TORPILLEUR;
@@ -150,10 +131,8 @@ Plateau initPlateau() {
 	return p;
 }
 
-/**
- * Affiche une grille de jeu
- * @param g Grille à afficher
- */
+// Affiche une grille de jeu
+
 void afficherGrille(int g[BOARD_SIZE][BOARD_SIZE]) {
 	int i, j;
 
@@ -177,8 +156,6 @@ B |   |   |   |   |   |   |   |   |   |   |
 				printf("%s", EAU_T);
 			} else if (// Bateau
 							g[i][j] == C_PORTE_AVION ||
-							g[i][j] == C_CROISEUR ||
-							g[i][j] == C_CONTRE_TORPILLEUR ||
 							g[i][j] == C_SOUS_MARIN ||
 							g[i][j] == C_TORPILLEUR
 							) {
@@ -192,26 +169,14 @@ B |   |   |   |   |   |   |   |   |   |   |
 	}
 }
 
-/**
- * Retourne le nombre de cellules encore vivantes
- * 
- * @param p
- * @return somme des cellules vivantes.
- */
+// Retourne le nombre de cellules encore vivantes
+
 int calcAlive(Plateau p) {
-	return p.contreTorpilleur + p.croiseur + p.porteAvion + p.sousMarin + p.torpilleur;
+	return p.contreTorpilleur  + p.porteAvion + p.sousMarin + p.torpilleur; // + croiseur
 }
 
-/**
- * Places a ship on the grid
- * @param p Board
- * @param nom Ship name
- * @param size Ship size
- * @param val Untouched ship value
- */
-// Function declaration for testing
-//Plateau placeShip(Plateau p, char nom[], int size, int val, char debugC[4 + 1]) {
-// Normal functiond declaration
+
+// placer un bateau dans la grille
 
 Plateau placeShip(Plateau p, char nom[], int size, int val) {
 	int done, error, i;
@@ -221,20 +186,20 @@ Plateau placeShip(Plateau p, char nom[], int size, int val) {
 					reponse;
 
 	afficherGrille(p.grille);
-	// IF YOU WANT TO DEBUG/TEST THE GAME,
-	// COMMENT FROM HERE
+	// L'explication du jeu a10v
+
 	printf("Pour placer un bateau, donnez l'adresse de la case de destination, puis\n"
 					"son orientation (h/v). Les batiments seront positionnés sur la droite de\n"
 					"la case donnée pour les placements horizontaux, et vers le base pour les \n"
 					"placements verticaux. Exemple : a10v\n\n");
 	printf("Veuillez placer le %s (%i cases)\n\n", nom, size);
 	do {
-		// Re-init vars
+  //réinitialiser les variables
 		error = 0;
 		done = 0;
 		strcpy(orientation, "horizontal");
 
-		// Ask for coordinates
+		// Demande de confirmation de la position d'un bateau
 		printf("Position : ");
 		scanf("%s", pos);
 
@@ -286,11 +251,8 @@ Plateau placeShip(Plateau p, char nom[], int size, int val) {
 			}
 		}
 	} while (done == 0);
-	// TO HERE ///////////////////////////////////////////////////////////////////
-	// AND UNCOMMENT THIS LINE
-	//	c = strToCoord(debugC, 1);
 
-	// Place ship on grid
+	// Placer un bateau dans la grille
 	if (c.d == 'v') {
 		for (i = c.y; i < c.y + size; i++) {
 			p.grille[i][c.x] = val;
@@ -303,32 +265,23 @@ Plateau placeShip(Plateau p, char nom[], int size, int val) {
 	return p;
 }
 
-/**
- * Closes all opened sockets, displays a message and exits the app with a given
- * code.
- * @param is Server/client configuration
- * @param code Error code (or 0)
- * @param message Message to display
- */
+
 void closeApp(InfosServer is, int code, char message[50]) {
-	// Closes sockets
+	// Fermets les sockets
 	close(is.socket_desc);
 	close(is.client_sock);
 
-	// Display message
+	// Présentation d'un message
 	printf("\n%s\n", message);
 
-	// Exit
+	// Sortie
 	exit(code);
 }
 
-/**
- * Initializes the server
- * 
- * @param port Port on wich to listen
- * @return Server informations
- */
-InfosServer initServer(int port) {
+
+ // Initialiser le serveur : ecoute du port
+
+  InfosServer initServer(int port) {
 	InfosServer is;
 
 	// Creation du socket
@@ -355,12 +308,9 @@ InfosServer initServer(int port) {
 	return is;
 }
 
-/**
- * Ecoute sur le port du serveur pour un message entrant.
- * 
- * @param is Infos serveur/client.
- * @return 0 on success, 1 on error.
- */
+
+  //Ecoute sur le port du serveur pour un message entrant.
+
 int receptionMessageClient(InfosServer is, Plateau * p) {
 	char server_response[20];
 	int content, status, pv = -1;
@@ -399,16 +349,6 @@ int receptionMessageClient(InfosServer is, Plateau * p) {
 			status = S_TOUCHE;
 			sprintf(server_response, "%d", S_TOUCHE);
 			switch (content) {
-				case C_CONTRE_TORPILLEUR:
-					(*p).grille[coup.y][coup.x] = C_CONTRE_TORPILLEUR_T;
-					(*p).contreTorpilleur--;
-					pv = (*p).contreTorpilleur;
-					break;
-				case C_CROISEUR:
-					(*p).grille[coup.y][coup.x] = C_CROISEUR_T;
-					(*p).croiseur--;
-					pv = (*p).croiseur;
-					break;
 				case C_PORTE_AVION:
 					(*p).grille[coup.y][coup.x] = C_PORTE_AVION_T;
 					(*p).porteAvion--;
@@ -441,7 +381,7 @@ int receptionMessageClient(InfosServer is, Plateau * p) {
 		//		printf(">> %s\n", server_response);
 		printf(ANSI_COLOR_BLUE "\nIl vous reste %i points...\n" ANSI_COLOR_RESET, calcAlive(*p));
 		if (calcAlive(*p) == 0) {
-			printf(ANSI_COLOR_RED"...Vous n'avez plus de bateaux. Vous avez perdu. Mince. Dommage...\n"ANSI_COLOR_RESET);
+			printf(ANSI_COLOR_RED"...Vous n'avez plus de bateaux. Vous avez perdu.\n"ANSI_COLOR_RESET);
 			sprintf(server_response, "%d", S_PERDU);
 		}
 		// Envoi d'une réponse au client
@@ -464,12 +404,9 @@ int receptionMessageClient(InfosServer is, Plateau * p) {
 	return status;
 }
 
-/**
- * Initialise le client
- * 
- * @param port Port du serveur (autre joueur)
- * @return 0 on success, 1 on error.
- */
+
+ //Initialise le client
+
 int initClient(int port) {
 	int sock;
 	struct sockaddr_in server;
@@ -494,12 +431,9 @@ int initClient(int port) {
 	return 0;
 }
 
-/**
- * Opens a connexion to a server
- * @param server_port
- * @param wait Set it to 0 to wait for server to be ready, 0 otherwise
- * @return 
- */
+
+ //Ouverture d'une connexion au serveur
+
 int connexionServer(int server_port, int wait) {
 	struct sockaddr_in server;
 	int sock;
@@ -521,16 +455,13 @@ int connexionServer(int server_port, int wait) {
 		}
 	} else {
 		while (connect(sock, (struct sockaddr *) &server, sizeof (server)) < 0) {
-			// Nothing. Infinite loop. Great.
+
 		}
 	}
 	return sock;
 }
 
-/**
- * Envoie un message au serveur et affiche la réponse de ce dernier.
- * @return 0 on success, 1 on error
- */
+// Envoie un message au serveur et affiche la réponse de ce dernier.
 int strike(int other_port, Plateau * p) {
 	char message[3 + 1], server_reply[3 + 1];
 	int sock, srvR;
@@ -540,7 +471,7 @@ int strike(int other_port, Plateau * p) {
 	sock = connexionServer(other_port, 0);
 
 	/*
-	 * "Interface graphique" 
+	 * "Interface graphique"
 	 */
 	printf("\nGrille de l'adversaire :\n");
 	printf("------------------------\n");
@@ -598,10 +529,9 @@ int strike(int other_port, Plateau * p) {
 
 }
 
-/**
- * Tente de se conncter au serveur
- * @param port
- */
+
+  //Tente de se conncter au serveur
+
 void handshake(int port) {
 	int sock, msgSize = (sizeof (char)*3);
 	char message[2 + 1], server_reply[2 + 1];
@@ -632,11 +562,9 @@ void handshake(int port) {
 	close(sock);
 }
 
-/**
- * Attend la connection du client
- * @param is
- * @return 
- */
+
+ // Attend la connection du client
+
 int wait_handshake(InfosServer is) {
 	int content;
 	char resp[2 + 1];
@@ -660,19 +588,17 @@ int wait_handshake(InfosServer is) {
 	}
 }
 
-/**
- * Main function
- * 
- * @return 
- */
+
+ // la fonction main
+ // Appel toutes les fonctions dans la fonction main
+
 int main() {
 	int t, self_port, other_port, status, perdu;
 
-	logo();
 
-	/*
-	 * Saisie du type d'instance.
-	 */
+
+	 // Saisie du type d'instance.
+
 	printf("Joueur 1 ou 2 ? [1/2] > ");
 	scanf("%i", &t);
 
@@ -684,14 +610,14 @@ int main() {
 		other_port = SRV_PORT;
 	}
 
-	/*
-	 * Initialisation du serveur
-	 */
+
+	 // Initialisation du serveur
+
 	InfosServer srv = initServer(self_port);
 
-	/*
-	 * Création de la partie
-	 */
+
+	 // Création de la partie
+
 	// Génération de la grille
 	Plateau plateau = initPlateau();
 
@@ -700,19 +626,11 @@ int main() {
 
 	// Placement des bateaux
 
-	// COMMENT THIS IF YOU WANT TO DEBUG/TEST THE GAME
 	plateau = placeShip(plateau, "porte avions", B_PORTE_AVION, C_PORTE_AVION);
-	plateau = placeShip(plateau, "croiseur", B_CROISEUR, C_CROISEUR);
-	plateau = placeShip(plateau, "contre-torpilleur", B_CONTRE_TORPILLEUR, C_CONTRE_TORPILLEUR);
 	plateau = placeShip(plateau, "sous-marin", B_SOUS_MARIN, C_SOUS_MARIN);
 	plateau = placeShip(plateau, "torpilleur", B_TORPILLEUR, C_TORPILLEUR);
 
-	// UNCOMMENT THIS IF YOU WANT TO DEBUG/TEST the thing
-	//	plateau = placeShip(plateau, "porte avions", B_PORTE_AVION, C_PORTE_AVION, "a1v");
-	//	plateau = placeShip(plateau, "croiseur", B_CROISEUR, C_CROISEUR, "a2v");
-	//	plateau = placeShip(plateau, "contre-torpilleur", B_CONTRE_TORPILLEUR, C_CONTRE_TORPILLEUR, "a3v");
-	//	plateau = placeShip(plateau, "sous-marin", B_SOUS_MARIN, C_SOUS_MARIN, "a4v");
-	//	plateau = placeShip(plateau, "torpilleur", B_TORPILLEUR, C_TORPILLEUR, "a5v");
+
 
 	printf("\n==============================================================\n");
 	printf(" Et c'est parti !");
